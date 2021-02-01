@@ -15,13 +15,13 @@ pub fn event_handler(_attr: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 fn impl_event_handler(ast: &ItemFn) -> TokenStream {
-    println!("AST: {:?}", ast);
+    // println!("AST: {:?}", ast);
     let ItemFn{sig, block, ..} = ast;
-    let Signature {ident, inputs, output, ..} = sig;
+    let Signature {ident, inputs, ..} = sig;
 
     let ident_string = ident.to_string();
     let ident_span = ident.span();
-    println!("X: {:?}: {:?}: {:?}", ident, ident_string, ident_span);
+    // println!("X: {:?}: {:?}: {:?}", ident, ident_string, ident_span);
     let ident_helper = Ident::new(&format!("{}_helper", ident_string), ident_span);
 
     let mut arg_iter = inputs.iter();
@@ -29,10 +29,13 @@ fn impl_event_handler(ast: &ItemFn) -> TokenStream {
     let (query_model_arg_name, query_model_type) = split_argument(arg_iter.next().unwrap());
 
     let event_type_ident = get_type_ident(event_type);
-    println!("Event type ident: {:?}", event_type_ident);
+    // println!("Event type ident: {:?}", event_type_ident);
     let event_type_literal = LitStr::new(&event_type_ident.to_string(), event_type_ident.span());
 
     let gen = quote! {
+        use dendrite::axon_utils;
+        use dendrite::axon_utils::HandlerRegistry;
+
         #[tonic::async_trait]
         impl AsyncApplicableTo<#query_model_type> for #event_type {
             async fn apply_to(self: &Self, #query_model_arg_name: &mut #query_model_type) -> Result<()> {
@@ -40,9 +43,20 @@ fn impl_event_handler(ast: &ItemFn) -> TokenStream {
                 debug!("Event type: {:?}", #event_type_literal);
                 #block
             }
+
+            fn box_clone(self: &Self) -> Box<dyn AsyncApplicableTo<#query_model_type>> {
+                Box::from(#event_type::clone(self))
+            }
         }
 
-        async fn #ident(#inputs) #output #block
+        // register event handler with registry
+        fn #ident(registry: &mut axon_utils::TheHandlerRegistry<#query_model_type,Option<#query_model_type>>) -> Result<()> {
+            registry.insert(
+                #event_type_literal,
+                &#event_type::decode,
+                &(|c,p| Box::pin(#ident_helper(Box::from(c), p)))
+            )
+        }
 
         async fn #ident_helper<T: AsyncApplicableTo<P>,P: Clone>(event: Box<T>, projection: P) -> Result<()> {
             let mut p = projection.clone();
