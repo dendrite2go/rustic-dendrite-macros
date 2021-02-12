@@ -3,6 +3,14 @@ name = "dendrite_macros"
 version = "0.1.0"
 authors = ["Jeroen van Maanen"]
 edition = "2018"
+description = "Macros to improve ergonomics of the dendrite crate."
+readme = "README.md"
+homepage = "https://github.com/dendrite2go/rustic-dendrite-macros"
+repository = "https://github.com/dendrite2go/rustic-dendrite-macros"
+license = "MIT"
+keywords = ["event-sourcing", "CQRS", "AxonServer"]
+categories = ["web-programming"]
+include = ["/src/**/*", "/Cargo.*", "/README.md", "/LICENSE"]
 
 [lib]
 proc-macro = true
