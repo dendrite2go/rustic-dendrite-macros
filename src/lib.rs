@@ -22,6 +22,7 @@ fn impl_event_handler(ast: &ItemFn) -> TokenStream {
     let ident_string = ident.to_string();
     let ident_span = ident.span();
     // println!("X: {:?}: {:?}: {:?}", ident, ident_string, ident_span);
+    let ident_tmp = Ident::new(&format!("{}_registry_type", ident_string), ident_span);
     let ident_helper = Ident::new(&format!("{}_helper", ident_string), ident_span);
 
     let mut arg_iter = inputs.iter();
@@ -33,8 +34,7 @@ fn impl_event_handler(ast: &ItemFn) -> TokenStream {
     let event_type_literal = LitStr::new(&event_type_ident.to_string(), event_type_ident.span());
 
     let gen = quote! {
-        use dendrite::axon_utils;
-        use dendrite::axon_utils::HandlerRegistry;
+        use ::dendrite::axon_utils::HandlerRegistry as #ident_tmp;
 
         #[tonic::async_trait]
         impl AsyncApplicableTo<#query_model_type> for #event_type {
@@ -50,7 +50,7 @@ fn impl_event_handler(ast: &ItemFn) -> TokenStream {
         }
 
         // register event handler with registry
-        fn #ident(registry: &mut axon_utils::TheHandlerRegistry<#query_model_type,Option<#query_model_type>>) -> Result<()> {
+        fn #ident(registry: &mut ::dendrite::axon_utils::TheHandlerRegistry<#query_model_type,Option<#query_model_type>>) -> Result<()> {
             registry.insert(
                 #event_type_literal,
                 &#event_type::decode,
@@ -85,6 +85,7 @@ fn impl_command_handler(ast: &ItemFn) -> TokenStream {
     let ident_string = ident.to_string();
     let ident_span = ident.span();
     // println!("X: {:?}: {:?}: {:?}", ident, ident_string, ident_span);
+    let ident_tmp = Ident::new(&format!("{}_registry_type", ident_string), ident_span);
     let ident_impl = Ident::new(&format!("{}_impl", ident_string), ident_span);
 
     let mut arg_iter = inputs.iter();
@@ -103,11 +104,10 @@ fn impl_command_handler(ast: &ItemFn) -> TokenStream {
     let output_type_literal = LitStr::new(&output_type_ident.to_string(), output_type_ident.span());
 
     let gen = quote! {
-        use dendrite::axon_utils;
-        use dendrite::axon_utils::HandlerRegistry;
+        use ::dendrite::axon_utils::HandlerRegistry as #ident_tmp;
 
         // register command handler with registry
-        fn #ident(registry: &mut axon_utils::TheHandlerRegistry<std::sync::Arc<async_lock::Mutex<#context_elem_type>>,axon_utils::SerializedObject>) -> Result<()> {
+        fn #ident(registry: &mut ::dendrite::axon_utils::TheHandlerRegistry<std::sync::Arc<async_lock::Mutex<#context_elem_type>>,::dendrite::axon_utils::SerializedObject>) -> Result<()> {
             registry.insert_with_output(
                 #command_type_literal,
                 &#command_type::decode,
@@ -119,7 +119,7 @@ fn impl_command_handler(ast: &ItemFn) -> TokenStream {
             let mut #context_arg_name = #context_arg_name.deref().lock().await;
             debug!("Event type: {:?}", #command_type_literal);
             let result : #output_type = #block;
-            let result: Option<Result<SerializedObject>> = result?.map(|r| axon_utils::axon_serialize(#output_type_literal, &r));
+            let result: Option<Result<SerializedObject>> = result?.map(|r| ::dendrite::axon_utils::axon_serialize(#output_type_literal, &r));
             match result {
                 Some(Ok(serialized)) => Ok(Some(serialized)),
                 Some(Err(e)) => Err(e),
