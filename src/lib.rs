@@ -140,7 +140,7 @@ fn split_argument<'a>(argument: &'a FnArg, handler_name: &str, qualifier: &str) 
 }
 
 fn get_elem_type_argument<'a>(argument: &'a Type, handler_name: &str, qualifier: &str) -> &'a Box<Type> {
-    println!("Get elem type of: {:?}", argument);
+    // println!("Get elem type of: {:?}", argument);
     if let Type::Reference(TypeReference { elem, .. }) = argument {
         return elem;
     }
@@ -167,7 +167,7 @@ fn get_return_type_ident<'a>(ty: &'a Type, handler_name: &str, qualifier: &str) 
 }
 
 fn get_first_generic_type_argument<'a>(ty: &'a Type, handler_name: &str, qualifier: &str) -> &'a Type {
-    println!("Try to get first generic type argument: {:?}", ty);
+    // println!("Try to get first generic type argument: {:?}", ty);
     if let Type::Path(TypePath { path: Path { segments, .. }, .. }) = ty {
         let last_segment = segments.last().unwrap();
         if let PathSegment { arguments: PathArguments::AngleBracketed(AngleBracketedGenericArguments { args, .. }), .. } = last_segment {
