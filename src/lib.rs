@@ -130,6 +130,72 @@ fn impl_command_handler(ast: &ItemFn) -> TokenStream {
     gen.into()
 }
 
+#[proc_macro_attribute]
+pub fn event_sourcing_handler(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    // Construct a representation of Rust code as a syntax tree
+    // that we can manipulate
+    let input = parse_macro_input!(item as ItemFn);
+
+    // Build the trait implementation
+    impl_event_sourcing_handler(&input)
+}
+
+fn impl_event_sourcing_handler(ast: &ItemFn) -> TokenStream {
+    // println!("AST: {:?}", ast);
+    let ItemFn{sig, block, ..} = ast;
+    let Signature {ident, inputs, ..} = sig;
+
+    let ident_string = ident.to_string();
+    let ident_span = ident.span();
+    // println!("X: {:?}: {:?}: {:?}", ident, ident_string, ident_span);
+    let ident_tmp = Ident::new(&format!("{}_registry_type", ident_string), ident_span);
+    let ident_applicable = Ident::new(&format!("{}_applicable_to", ident_string), ident_span);
+    let ident_helper = Ident::new(&format!("{}_helper", ident_string), ident_span);
+
+    let mut arg_iter = inputs.iter();
+    let (event_arg_name, event_type) = split_argument(arg_iter.next().unwrap(), &ident_string, "event");
+    let (projection_arg_name, projection_type) = split_argument(arg_iter.next().unwrap(), &ident_string, "projection");
+
+    let event_type_ident = get_type_ident(event_type, &ident_string, "event");
+    // println!("Event type ident: {:?}", event_type_ident);
+    let event_type_literal = LitStr::new(&event_type_ident.to_string(), event_type_ident.span());
+
+    let gen = quote! {
+        use ::dendrite::axon_utils::HandlerRegistry as #ident_tmp;
+        use ::dendrite::axon_utils::ApplicableTo as #ident_applicable;
+
+        #[tonic::async_trait]
+        impl #ident_applicable<#projection_type> for #event_type {
+            fn apply_to(self: &Self, #projection_arg_name: &mut #projection_type) -> Result<()> {
+                let #event_arg_name = self;
+                debug!("Event type: {:?}", #event_type_literal);
+                #block;
+                Ok(())
+            }
+
+            fn box_clone(self: &Self) -> Box<dyn #ident_applicable<#projection_type>> {
+                Box::from(#event_type::clone(self))
+            }
+        }
+
+        // register event handler with registry
+        fn #ident(registry: &mut ::dendrite::axon_utils::TheHandlerRegistry<#projection_type,#projection_type>) -> Result<()> {
+            registry.insert_with_output(
+                #event_type_literal,
+                &#event_type::decode,
+                &(|c,p| Box::pin(#ident_helper(Box::from(c), p)))
+            )
+        }
+
+        async fn #ident_helper<T: ApplicableTo<P>,P: Clone>(event: Box<T>, projection: P) -> Result<Option<P>> {
+            let mut p = projection.clone();
+            event.apply_to(&mut p)?;
+            Ok(Some(p))
+        }
+    };
+    gen.into()
+}
+
 fn split_argument<'a>(argument: &'a FnArg, handler_name: &str, qualifier: &str) -> (&'a Ident, &'a Box<Type>) {
     if let FnArg::Typed(PatType {pat, ty, ..}) = argument {
         if let Pat::Ident(PatIdent {ref ident, ..}) = **pat {
