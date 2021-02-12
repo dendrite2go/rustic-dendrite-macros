@@ -244,3 +244,52 @@ fn get_first_generic_type_argument<'a>(ty: &'a Type, handler_name: &str, qualifi
     }
     panic!("Can't get first generic type argument: {:?}: {:?}", handler_name, qualifier)
 }
+
+#[proc_macro_attribute]
+pub fn query_handler(_attr: TokenStream, item: TokenStream) -> TokenStream {
+    // Construct a representation of Rust code as a syntax tree
+    // that we can manipulate
+    let input = parse_macro_input!(item as ItemFn);
+
+    // Build the trait implementation
+    impl_query_handler(&input)
+}
+
+fn impl_query_handler(ast: &ItemFn) -> TokenStream {
+    // println!("AST: {:?}", ast);
+    let ItemFn{sig, block, ..} = ast;
+    let Signature {ident, inputs, ..} = sig;
+
+    let ident_string = ident.to_string();
+    let ident_span = ident.span();
+    // println!("X: {:?}: {:?}: {:?}", ident, ident_string, ident_span);
+    let ident_tmp = Ident::new(&format!("{}_registry_type", ident_string), ident_span);
+    let ident_impl = Ident::new(&format!("{}_impl", ident_string), ident_span);
+
+    let mut arg_iter = inputs.iter();
+    let (event_arg_name, event_type) = split_argument(arg_iter.next().unwrap(), &ident_string, "event");
+    let (query_model_arg_name, query_model_type) = split_argument(arg_iter.next().unwrap(), &ident_string, "query model");
+
+    let event_type_ident = get_type_ident(event_type, &ident_string, "event");
+    // println!("Event type ident: {:?}", event_type_ident);
+    let event_type_literal = LitStr::new(&event_type_ident.to_string(), event_type_ident.span());
+
+    let gen = quote! {
+        use ::dendrite::axon_utils::HandlerRegistry as #ident_tmp;
+
+        async fn #ident_impl(#event_arg_name: #event_type, #query_model_arg_name: #query_model_type) -> Result<Option<::dendrite::axon_utils::QueryResult>> {
+            debug!("Event type: {:?}", #event_type_literal);
+            #block
+        }
+
+        // register event handler with registry
+        fn #ident(registry: &mut ::dendrite::axon_utils::TheHandlerRegistry<#query_model_type,::dendrite::axon_utils::QueryResult>) -> Result<()> {
+            registry.insert_with_output(
+                #event_type_literal,
+                &#event_type::decode,
+                &(|c,p| Box::pin(#ident_impl(c, p)))
+            )
+        }
+    };
+    gen.into()
+}
