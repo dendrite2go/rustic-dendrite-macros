@@ -15,19 +15,33 @@ pub fn event_handler(_attr: TokenStream, item: TokenStream) -> TokenStream {
 }
 
 fn impl_event_handler(ast: &ItemFn) -> TokenStream {
-    // println!("AST: {:?}", ast);
+    println!("AST: {:?}", ast);
     let ItemFn{sig, block, ..} = ast;
     let Signature {ident, inputs, ..} = sig;
+    println!("Signature: {:?}", sig);
 
     let ident_string = ident.to_string();
     let ident_span = ident.span();
     // println!("X: {:?}: {:?}: {:?}", ident, ident_string, ident_span);
     let ident_tmp = Ident::new(&format!("{}_registry_type", ident_string), ident_span);
     let ident_helper = Ident::new(&format!("{}_helper", ident_string), ident_span);
+    let ident_wrapper = Ident::new(&format!("{}_wrapper", ident_string), ident_span);
 
     let mut arg_iter = inputs.iter();
-    let (event_arg_name, event_type) = split_argument(arg_iter.next().unwrap(), &ident_string, "event");
+    let (event_arg_name, event_param_type) = split_argument(arg_iter.next().unwrap(), &ident_string, "event");
     let (query_model_arg_name, query_model_type) = split_argument(arg_iter.next().unwrap(), &ident_string, "query model");
+
+    let (wrapper_option, event_type) = unwrap_generic_type(event_param_type, &ident_string, "event");
+    println!("Wrapper option: {:?}", wrapper_option);
+
+    let cast = if wrapper_option.is_none() {
+        quote! {
+            let event = event.into_inner();
+        }
+    } else {
+        quote! {}
+    };
+    println!("Cast: {:?}", cast);
 
     let event_type_ident = get_type_ident(event_type, &ident_string, "event");
     // println!("Event type ident: {:?}", event_type_ident);
@@ -35,6 +49,7 @@ fn impl_event_handler(ast: &ItemFn) -> TokenStream {
 
     let gen = quote! {
         use ::dendrite::axon_utils::HandlerRegistry as #ident_tmp;
+        use ::dendrite::axon_utils::Event as #ident_wrapper;
 
         #[tonic::async_trait]
         impl AsyncApplicableTo<#query_model_type> for #event_type {
@@ -211,6 +226,25 @@ fn get_elem_type_argument<'a>(argument: &'a Type, handler_name: &str, qualifier:
         return elem;
     }
     panic!("Can't get element type of reference: {:?}: {:?}", handler_name, qualifier)
+}
+
+fn unwrap_generic_type<'a>(ty: &'a Type, handler_name: &str, qualifier: &str) -> (Option<&'a Ident>, &'a Type) {
+    println!("Unwrap generic type: {:?}: {:?}: {:?}", ty, handler_name, qualifier);
+    if let Type::Path(TypePath {path:Path {segments:arg_segments,..}, ..}) = ty {
+        let last_arg_segment = arg_segments.last().unwrap();
+        if let
+            PathSegment {
+                ident,
+                arguments: PathArguments::AngleBracketed(AngleBracketedGenericArguments{args,..})
+                , ..
+            } = last_arg_segment
+        {
+            if let Some(GenericArgument::Type(wrapped_type)) = args.first() {
+                return (Some(ident), wrapped_type);
+            }
+        }
+    }
+    (None, ty)
 }
 
 fn get_type_ident<'a>(ty: &'a Type, handler_name: &str, qualifier: &str) -> &'a Ident {
