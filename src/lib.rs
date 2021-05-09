@@ -42,13 +42,13 @@ fn impl_event_handler(ast: &ItemFn) -> TokenStream {
 
         #[tonic::async_trait]
         impl AsyncApplicableTo<#query_model_type, ::dendrite::axon_server::event::Event> for #event_type {
-            async fn apply_to(self: &Self, #metadata_arg, #query_model_arg_name: &mut #query_model_type) -> Result<()> {
+            async fn apply_to(self, #metadata_arg, #query_model_arg_name: &mut #query_model_type) -> Result<()> {
                 let #event_arg_name = self;
                 debug!("Event type: {:?}", #event_type_literal);
                 #block
             }
 
-            fn box_clone(self: &Self) -> Box<dyn AsyncApplicableTo<#query_model_type,::dendrite::axon_server::event::Event>> {
+            fn box_clone(&self) -> Box<dyn AsyncApplicableTo<#query_model_type,::dendrite::axon_server::event::Event>> {
                 Box::from(#event_type::clone(self))
             }
         }
@@ -167,14 +167,14 @@ fn impl_event_sourcing_handler(ast: &ItemFn) -> TokenStream {
     let gen = quote! {
         #[tonic::async_trait]
         impl ::dendrite::axon_utils::ApplicableTo<#projection_type,::dendrite::axon_server::event::Event> for #event_type {
-            fn apply_to(self: &Self, #metadata_arg, #projection_arg_name: &mut #projection_type) -> Result<()> {
+            fn apply_to(self, #metadata_arg, #projection_arg_name: &mut #projection_type) -> Result<()> {
                 let #event_arg_name = self;
                 debug!("Event type: {:?}", #event_type_literal);
                 #block;
                 Ok(())
             }
 
-            fn box_clone(self: &Self) -> Box<dyn ::dendrite::axon_utils::ApplicableTo<#projection_type,::dendrite::axon_server::event::Event>> {
+            fn box_clone(&self) -> Box<dyn ::dendrite::axon_utils::ApplicableTo<#projection_type,::dendrite::axon_server::event::Event>> {
                 Box::from(#event_type::clone(self))
             }
         }
